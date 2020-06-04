@@ -7,10 +7,10 @@ description = "Resolviendo problemas de performance relacionados al N+1 query pr
 author= "Xairi Valdivia"
 +++
 
-El **N+1 query problem** es un problema de performance comunmente presente en los
+El **N+1 query problem** es un problema de performance muy común entre los
 ORM([Object Relational Mapping](https://en.wikipedia.org/wiki/Object-relational_mapping)).
-Cualquier código que recorra un arreglo y por cada elemento de este arreglo ejecute un
-query adicional tiene este problema.
+Si tenemos una porción de código que recorre un arreglo y ejecuta un query adicional
+por cada elemento, entonces podemos decir que estamos frente este problema.
 
 > El término "N+1 query problem" o "N+1 select problem" surgió a principios de los 2000
 > con el uso del ORM Hibernate. La primera referencia a este problema puede ser
@@ -18,10 +18,9 @@ query adicional tiene este problema.
 
 Si bien este problema es muy común, actualmente los orm nos ofrecen herramientas para poder evitarlo.
 
-Analicemos el siguiente ejemplo para poder entender mejor como es que podemos introducir este problema
-en nuestro código sin darnos cuenta.
+Para poder entenderlo mejor analicemos el siguiente ejemplo.
 
-Primero crearemos estos modelos dos modelos obtenidos del tutorial de la página web de django.
+Primero creamos estos dos modelos.
 
 ```python
 class Question(models.Model):
@@ -34,7 +33,7 @@ class Choice(models.Model):
     votes = models.IntegerField(default=0)
 ```
 
-A continuación creamos la siguiente vista:
+A continuación creamos nuestra vista:
 
 ```python
 def choices_detail(request):
@@ -42,11 +41,11 @@ def choices_detail(request):
     context = {'choices': choices}
     return render(request, 'polls/choices_detail.html', context)
 ```
-El **QuerySet** de nuestra vista es el que va a causar problemas en nuestro template, pero ningún código SQL
+El QuerySet de nuestra vista es el que va a causar problemas en nuestro template, pero ningún código SQL
 es ejecutado aún porque los QuerySets son [lazy](https://docs.djangoproject.com/en/2.2/topics/db/queries/#querysets-are-lazy).
 
-Finalmente agregaremos esta porción de código a nuestro template para que obtenga los datos
-de la vista creada anteriormente:
+Finalmente agregamos esta porción de código a nuestro template para que obtenga los datos
+de nuestra vista.
 
 ```python
       {% for choice in choices %}
@@ -55,16 +54,16 @@ de la vista creada anteriormente:
         <p>Votes: {{ choice.votes }}</p>
       {% endfor %}
 ```
-La línea de código que generará un query adicional por cada choice es: {{ choice.question.question_text }}.
+Atención a esta línea de código: {{ choice.question.question_text }}, Esta línea
+es la que ejecutará un query adicional por cada iteración de choices.
 
 ## ¿Por qué ocurre este problema?
-Como vemos en el ejemplo anterior, nosotros esperamos ejecutar un solo query para obtener
-todos los registros de la tabla Choice e imprimir los valores, pero choice.question representa
-una llave foránea entre Choice y Question. El comportamiento del ORM de django por defecto es
-el de no incluir data de las relaciones en un Queryset a menos que sea requerido explícitamente,
-por lo tanto, en este caso question no estará disponible cuando el loop ejecute la línea
-que pinta **choice.question.question_text**, por lo tanto django va a tener que ejecutar otro query
-para poder obtener los datos relacionados al elemento actual.
+Como vemos en el ejemplo anterior, nosotros esperamos que se ejecute un solo query para obtener
+todos los registros del modelo Choice e imprimir sus valores, pero choice.question representa
+una llave foránea entre Choice y Question. El comportamiento por defecto del ORM de django es
+el de no incluir data de los modelos relacionados en un Queryset a menos que sea requerido explícitamente,
+por lo tanto, en nuestro ejemplo django va a tener que ejecutar un query adicional cada vez que
+querramos acceder a la data de Question.
 
 ## Usando el método select_related
 Nuestra mejor herramienta contra el **N+1 problem** es el método [select_related](https://docs.djangoproject.com/en/2.2/ref/models/querysets/#select-related).
@@ -72,8 +71,8 @@ Nuestra mejor herramienta contra el **N+1 problem** es el método [select_relate
 El método select_related toma una lista de strings como parámetros, Cada string debe coincidir
 con el nombre del campo que representa una llave foránea en el modelo, en este caso "question".
 
-Para solucionar el problema de performance descrito anteriormente modificaremos nuestra vista
-y haremos uso del método select_related.
+Para solucionar nuestro problema de performance modificaremos nuestra vista
+para que nuestro QuerySet haga uso del método select_related.
 
 ```python
 def choices_detail(request):
@@ -82,11 +81,11 @@ def choices_detail(request):
     return render(request, 'polls/choices_detail.html', context)
 ```
 
-Con esta modificación ya no se generará un nuevo query por cada iteración de choices, ya que
-el select_related habrá hecho un join con "question" y habrá obtenido los datos de la tabla
-relacionada a ese campo.
+Con esta modificación habremos logrado obtener todos los datos requeridos por
+nuestro template con solo un Query, gracias a que el método select_related habrá hecho
+un join con la tabla relacionada al campo "question".
 
-A continuación el query generado por el select_related de nuestra vista:
+El siguiente es el query generado por el método select_related de nuestra vista.
 
 ```sql
 SELECT "polls_choice"."id", "polls_choice"."question_id",
@@ -97,10 +96,10 @@ INNER JOIN "polls_question" ON ("polls_choice"."question_id" = "polls_question".
 ```
 
 ## Método prefetch_related
-Mientras que el método "select_related" hace uso del **JOIN** para incluir data relacionada en un query,
-**prefetch_related** hace uso de otra técnica de optimización: crea una query adicional para obtener
+Mientras que el método "select_related" hace uso del JOIN para incluir data relacionada en un query,
+el método "prefetch_related" hace uso de otra técnica de optimización: crea una query adicional para obtener
 la data relacionada y entonces la combina con el queryset después de que las queries sean evaluadas.
-A continuación mostraremos como es que funciona este método.
+A continuación se mostrará como funciona este método.
 
 Primero creamos los modelos:
 
@@ -133,7 +132,7 @@ for article in Article.objects.all():
     print(article.publications.all())
 ```
 
-Este es el query generado por el una iteración del bucle:
+Este es el query generado por una iteración del bucle.
 
 ```sql
 SELECT "polls_publication"."id", "polls_publication"."title"
@@ -144,17 +143,17 @@ WHERE "polls_article_publications"."article_id" = 3
 ORDER BY "polls_publication"."title"
 ```
 
-Si tuviésemos 5000 artículos, generaríamos 1 query para obtenerlos todos y después generaríamos
-otras 5000 queries para obtener cada publicación y esto es precisamente lo que queremos evitar.
+Si hubieran 5000 artículos se ejecutaría 1 query para obtenerlos todos y después se ejecutarían
+otras 5000 queries para obtener cada publicación, y esto es precisamente lo que queremos evitar.
 
-Ahora ejecutamos al misma consulta pero con el método **prefetch_related**
+Ahora ejecutamos la misma consulta pero con el método **prefetch_related**.
 
 ```python
 for article in Article.objects.all().prefetch_related('events'):
     print(article.publications.all())
 ```
 
-Este es el query generado por el código anterior:
+Este es el query generado.
 
 ```sql
 SELECT ("polls_article_publications"."article_id") AS "_prefetch_related_val_article_id",
